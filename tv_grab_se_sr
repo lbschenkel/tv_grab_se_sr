@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -e
+
+opts=$(getopt -n "$0" -o "" -l "description,capabilities,version,configure,config-file,days:,offset:,output:" -- "$@")
+eval set -- ${opts}
+
+while true; do
+  case "$1" in
+    --description) echo "Sveriges Radio (sverigesradio.se)"; exit 0 ;;
+    --capabilities) echo "baseline"; exit 0 ;;
+    --configure) echo "Nothing to configure"; exit 0 ;;
+    --config-file) ;;
+    --version) echo "0.1"; exit 0 ;;
+    --days) DAYS="$2"; shift 2 ;;
+    --offset) OFFSET="$2"; shift 2 ;;
+    --output) OUTPUT="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) echo Unrecognized option: $1 > /dev/stderr; exit 1 ;;
+  esac
+done
+DAYS=${DAYS:-7}
+OFFSET=${OFFSET:-0}
+OUTPUT=${OUTPUT:-/dev/stdout}
+
+tmpfile=$(mktemp)
+trap "rm -f ${tmpfile}*" EXIT
+
+export LC_ALL=C # treat bytes as bytes, files may contain invalid UTF-8
+for day in $(seq $OFFSET $(expr $OFFSET + $DAYS - 1))
+do
+  date=$(date -d "+ ${day} day 00:00:00" +%Y-%m-%d)
+  # Note that sed is used to fix the invalid <icon> elements in the original
+  # files instead of a different tool to keep the script more portable.
+  curl -s https://sverigesradio.se/xmltv/sr_${date}.xml \
+  | sed 's|<icon>\(.*\)</icon>|<icon src="\1"/>|g' \
+  > ${tmpfile}-${date}.xml
+done
+tv_cat ${tmpfile}*.xml > ${OUTPUT}
